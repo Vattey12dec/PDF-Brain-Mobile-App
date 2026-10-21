@@ -1,0 +1,23 @@
+# Environment & Secrets
+.env
+*.env
+!.env.example
+
+# Python / FastAPI
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Databases & Uploaded Artifacts (Private User Data)
+backend/storage/
+backend/chroma_data/
+*.db
+*.sqlite3
+
+# Flutter
+frontend/.dart_tool/
+frontend/build/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies

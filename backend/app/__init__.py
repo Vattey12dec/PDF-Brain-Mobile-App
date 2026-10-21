@@ -1,0 +1,1 @@
+"""PDF Brain FastAPI application package."""
