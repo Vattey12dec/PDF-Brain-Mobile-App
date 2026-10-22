@@ -32,20 +32,24 @@ class NavigationProvider extends ChangeNotifier {
 
 class AuthProvider extends ChangeNotifier {
   User? _user;
+  Session? _session;
   bool _isLoading = false;
   String? _error;
   ThemeMode _themeMode = ThemeMode.light;
 
   AuthProvider() {
-    _user = Supabase.instance.client.auth.currentUser;
+    _session = Supabase.instance.client.auth.currentSession;
+    _user = _session?.user;
     Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      _session = data.session;
       _user = data.session?.user;
       notifyListeners();
     });
   }
 
   User? get user => _user;
-  bool get isAuthenticated => _user != null;
+  // User is only authenticated into the app when they have an active session
+  bool get isAuthenticated => _session != null && _user != null;
   bool get isLoading => _isLoading;
   String? get error => _error;
   ThemeMode get themeMode => _themeMode;
@@ -75,6 +79,7 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 1. Sign in existing user directly with Email & Password
   Future<bool> signIn({required String email, required String password}) async {
     _isLoading = true;
     _error = null;
@@ -84,8 +89,9 @@ class AuthProvider extends ChangeNotifier {
         email: email.trim(),
         password: password,
       );
+      _session = res.session;
       _user = res.user;
-      return true;
+      return _session != null;
     } on AuthException catch (e) {
       _error = e.message;
       return false;
@@ -98,6 +104,7 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// 2. Create Account & Send 6-Digit Email OTP
   Future<bool> signUp({
     required String fullName,
     required String email,
@@ -112,6 +119,17 @@ class AuthProvider extends ChangeNotifier {
         password: password,
         data: {'full_name': fullName.trim()},
       );
+
+      // If Supabase returned identities as empty, the email is already registered
+      if (res.user != null &&
+          res.user!.identities != null &&
+          res.user!.identities!.isEmpty) {
+        _error = 'An account with this email already exists. Please sign in instead.';
+        return false;
+      }
+
+      // Keep session null until OTP is verified if email confirmation is enabled
+      _session = res.session;
       _user = res.user;
       return true;
     } on AuthException catch (e) {
@@ -119,6 +137,58 @@ class AuthProvider extends ChangeNotifier {
       return false;
     } catch (_) {
       _error = 'Unable to register account. Please check your connection.';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// 3. Verify the 6-Digit OTP sent to Email and log into the app
+  Future<bool> verifyEmailOtp({
+    required String email,
+    required String otpCode,
+  }) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      final res = await Supabase.instance.client.auth.verifyOTP(
+        email: email.trim(),
+        token: otpCode.trim(),
+        type: OtpType.signup,
+      );
+      _session = res.session;
+      _user = res.user;
+      return _session != null;
+    } on AuthException catch (e) {
+      _error = e.message;
+      return false;
+    } catch (_) {
+      _error = 'Invalid or expired verification code. Please try again.';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// 4. Resend the 6-Digit Signup OTP Email
+  Future<bool> resendSignupOtp(String email) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      await Supabase.instance.client.auth.resend(
+        type: OtpType.signup,
+        email: email.trim(),
+      );
+      return true;
+    } on AuthException catch (e) {
+      _error = e.message;
+      return false;
+    } catch (_) {
+      _error = 'Failed to resend verification code.';
       return false;
     } finally {
       _isLoading = false;
@@ -147,6 +217,7 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> signOut() async {
     await Supabase.instance.client.auth.signOut();
+    _session = null;
     _user = null;
     notifyListeners();
   }

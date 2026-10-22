@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     # Gemini AI Configuration (Server-Side Only)
-    GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_API_KEY: str = "AQ.Ab8RN6L2nK1qbmSSMSe6pFwpTH-wIgcBnyNPe7sb4afKthRsuQ"
+    GEMINI_MODEL: str = "gemini-3.8-flash"
     EMBEDDING_MODEL: str = "gemini-embedding-001"
 
     # Supabase Auth Configuration

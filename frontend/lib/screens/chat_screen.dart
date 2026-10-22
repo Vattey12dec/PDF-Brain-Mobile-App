@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:provider/provider.dart';
-
+import '../widgets/math_markdown.dart';
 import '../models/models.dart';
 import '../providers/app_providers.dart';
 import 'documents_and_viewer_screens.dart';
+
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -492,10 +492,7 @@ class _TurnExchangeWidget extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
-                MarkdownBody(
-                  data: turn.answer,
-                  selectable: true,
-                ),
+                MathMarkdown(data: turn.answer),
                 if (turn.sources.isNotEmpty) ...[
                   const SizedBox(height: 14),
                   const Divider(height: 1),
@@ -560,5 +557,7 @@ class _TurnExchangeWidget extends StatelessWidget {
         ),
       ],
     );
+    
   }
+  
 }

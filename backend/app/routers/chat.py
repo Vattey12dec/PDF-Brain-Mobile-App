@@ -77,11 +77,11 @@ def ask_question(
 
     target_doc_ids = [d.id for d in ready_docs]
 
-    retrieved_chunks = vector_service.query_user_chunks(
-        user_id=current_user.user_id,
-        query_text=payload.question,
+    retrieved_chunks = vector_service.search_similar_chunks(
+        owner_id=current_user.user_id,
+        question=payload.question,
         document_ids=target_doc_ids,
-    )
+)
 
     answer_text, found_in_docs, verified_sources = rag_service.answer_question(
         question=payload.question,

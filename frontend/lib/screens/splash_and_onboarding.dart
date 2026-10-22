@@ -73,7 +73,7 @@ class WelcomeOnboardingScreen extends StatelessWidget {
                     child: OutlinedButton(
                       onPressed: () => Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                        MaterialPageRoute(builder: (_) => const SignInScreen()),
                       ),
                       child: const Padding(
                         padding: EdgeInsets.symmetric(vertical: 14),

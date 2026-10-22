@@ -19,7 +19,10 @@ SYSTEM_PROMPT = (
     "5. Only set found_in_documents to false if the user's question is completely unrelated to the topics or exercises in the supplied excerpts.\n"
     "6. When answering a question or solving an exercise from the excerpts, set found_in_documents to true "
     "and list the exact chunk_id strings of the passages containing the question/data in cited_chunk_ids.\n"
-    "Provide final calculated values in a clean, concise table without lengthy intermediate binary work unless asked."
+    "Provide final calculated values in a clean, concise table without lengthy intermediate binary work unless asked.\n"
+    "7. Never use LaTeX or $ symbols. Write math in plain readable text with Unicode symbols, "
+    "for example: f(x) = 1 + 3x² − x⁵, sin(x² + 1), ≠, ∞, ℝ, √, ≤, ≥, π, ∫, Σ. "
+    "Use ^ only when a superscript character is not available.\n"
 )
 
 
@@ -90,6 +93,8 @@ class GeminiLLMClient:
         except HTTPException:
             raise
         except Exception as exc:
+            import logging
+            logging.getLogger("uvicorn.error").exception("Gemini generation failed")
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"AI generation failed via model ({self.model_name}). Please retry shortly.",
