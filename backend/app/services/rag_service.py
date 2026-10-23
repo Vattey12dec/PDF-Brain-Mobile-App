@@ -7,6 +7,8 @@ from fastapi import HTTPException, status
 from app.core.config import settings
 from app.schemas.api_schemas import SourceReference
 from app.services.vector_service import RetrievedChunk
+import logging
+import time
 
 SYSTEM_PROMPT = (
     "You are PDF Brain, an academic assistant and problem-solving tutor that helps users understand and solve content from their uploaded PDF documents.\n"
@@ -71,34 +73,43 @@ class GeminiLLMClient:
             f"Respond strictly in JSON matching the required schema."
         )
 
-        try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=user_prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_PROMPT,
-                    temperature=0.1,
-                    response_mime_type="application/json",
-                    response_schema=LLMGenerationSchema,
-                ),
-            )
-            raw_text = response.text or ""
-            parsed_data = json.loads(raw_text)
-            return LLMGenerationSchema.model_validate(parsed_data)
-        except json.JSONDecodeError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="AI provider returned a malformed response. Please try asking again.",
-            ) from exc
-        except HTTPException:
-            raise
-        except Exception as exc:
-            import logging
-            logging.getLogger("uvicorn.error").exception("Gemini generation failed")
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"AI generation failed via model ({self.model_name}). Please retry shortly.",
-            ) from exc
+        models_to_try = [self.model_name, "gemini-3.6-flash"]
+        last_exc: Optional[Exception] = None
+
+        for model in models_to_try:
+            for attempt in range(2):
+                try:
+                    response = self.client.models.generate_content(
+                        model=model,
+                        contents=user_prompt,
+                        config=types.GenerateContentConfig(
+                            system_instruction=SYSTEM_PROMPT,
+                            temperature=0.1,
+                            response_mime_type="application/json",
+                            response_schema=LLMGenerationSchema,
+                        ),
+                    )
+                    raw_text = response.text or ""
+                    parsed_data = json.loads(raw_text)
+                    return LLMGenerationSchema.model_validate(parsed_data)
+                except json.JSONDecodeError as exc:
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail="AI provider returned a malformed response. Please try asking again.",
+                    ) from exc
+                except HTTPException:
+                    raise
+                except Exception as exc:
+                    last_exc = exc
+                    logging.getLogger("uvicorn.error").warning(
+                        "Gemini call failed (model=%s, attempt=%d): %r", model, attempt + 1, exc
+                    )
+                    time.sleep(1.5 * (attempt + 1))
+
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI generation failed via model ({self.model_name}). Please retry shortly.",
+        ) from last_exc
 
 
 class RAGService:

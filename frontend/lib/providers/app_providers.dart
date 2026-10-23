@@ -130,7 +130,7 @@ class AuthProvider extends ChangeNotifier {
 
       // Keep session null until OTP is verified if email confirmation is enabled
       _session = res.session;
-      _user = res.user;
+      _user = res.session?.user; 
       return true;
     } on AuthException catch (e) {
       _error = e.message;
