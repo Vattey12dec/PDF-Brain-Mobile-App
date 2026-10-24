@@ -233,7 +233,7 @@ class PdfDocumentModel {
 
   bool get isReady => status == 'ready';
   bool get hasFailed => status == 'failed';
-  bool get isProcessing => status == 'processing';
+  bool get isProcessing => !isReady && !hasFailed;
 
   String get formattedSize {
     if (fileSizeBytes < 1024) return '$fileSizeBytes B';

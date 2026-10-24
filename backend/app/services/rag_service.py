@@ -108,6 +108,7 @@ class GeminiLLMClient:
 
         deadline = time.monotonic() + TOTAL_DEADLINE_S
         last_exc: Optional[Exception] = None
+        missing_models: List[str] = []
 
         for model in self._model_chain():
             for attempt in range(ATTEMPTS_PER_MODEL):
@@ -138,7 +139,8 @@ class GeminiLLMClient:
                             detail="AI service is misconfigured (API key rejected).",
                         ) from exc
                     if code == 404:
-                        break  # bad model name: skip to the next model
+                        missing_models.append(model)
+                        break  # model retired / bad name: skip to the next model
                     if code not in TRANSIENT_CODES:
                         raise HTTPException(
                             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -159,6 +161,16 @@ class GeminiLLMClient:
                     )
                     break  # a timeout on this model: try the next one
 
+        chain = self._model_chain()
+        if len(missing_models) == len(chain):
+            logger.error("No configured Gemini model is available: %s", chain)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "None of the configured Gemini models are available. "
+                    "Update GEMINI_MODEL / GEMINI_FALLBACK_MODELS in backend/.env."
+                ),
+            ) from last_exc
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="The AI service is busy right now. Please retry in a moment.",

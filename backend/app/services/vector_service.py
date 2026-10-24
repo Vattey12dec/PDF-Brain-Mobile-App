@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from typing import List, Optional, Protocol
 import chromadb
@@ -6,6 +7,8 @@ from google import genai
 from fastapi import HTTPException, status
 from app.core.config import settings
 from app.services.chunking_service import DocumentChunk
+
+logger = logging.getLogger("uvicorn.error")
 
 
 @dataclass
@@ -63,6 +66,7 @@ class GeminiEmbeddingClient:
         except HTTPException:
             raise
         except Exception as exc:
+            logger.error("Embedding call failed (model=%s): %r", self.model_name, exc)
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Embedding generation failed via provider ({self.model_name}). Please retry shortly.",

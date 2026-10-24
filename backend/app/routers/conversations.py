@@ -2,7 +2,6 @@ import json
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from app.schemas.api_schemas import DocumentOut, DocumentStatusOut, DocumentListResponse
 from app.core.database import get_db
 from app.core.security import AuthenticatedUser, get_current_user
 from app.models.db_models import Conversation, utc_now
@@ -100,16 +99,3 @@ def delete_conversation(
     db.delete(conv)
     db.commit()
     return {"deleted": True, "conversation_id": conversation_id}
-
-@router.get("", response_model=DocumentListResponse)
-def list_documents(
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    docs = (
-        db.query(Document)
-        .filter(Document.owner_id == current_user.user_id)
-        .order_by(Document.created_at.desc())
-        .all()
-    )
-    return DocumentListResponse(documents=[DocumentOut.model_validate(d) for d in docs])

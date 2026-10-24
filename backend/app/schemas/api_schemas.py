@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class DocumentOut(BaseModel):
@@ -41,6 +41,14 @@ class ChatQuestionRequest(BaseModel):
     question: str = Field(..., min_length=2, max_length=2000)
     document_ids: Optional[List[str]] = None
     title: Optional[str] = Field(default=None, max_length=255)
+
+    @field_validator("question")
+    @classmethod
+    def question_not_blank(cls, v: str) -> str:
+        cleaned = v.strip()
+        if len(cleaned) < 2:
+            raise ValueError("Question must contain at least 2 non-space characters.")
+        return cleaned
 
 
 class ChatUpdateRequest(BaseModel):

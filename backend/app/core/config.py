@@ -8,9 +8,9 @@ class Settings(BaseSettings):
 
     # Gemini AI Configuration (Server-Side Only)
     GEMINI_API_KEY: str  # required, set in .env
-    GEMINI_MODEL: str = "gemini-3.8-flash"
+    GEMINI_MODEL: str = "gemini-3.5-flash"
     GEMINI_FALLBACK_MODELS: str = (
-        "gemini-3.7-flash,gemini-3.5-flash,gemini-3.5-flash-lite,gemini-2.5-flash"
+        "gemini-3.1-flash-lite,gemini-3.6-flash,gemini-2.5-flash"
     )
     EMBEDDING_MODEL: str = "gemini-embedding-001"
     GEMINI_MAX_ATTEMPTS: int = 3

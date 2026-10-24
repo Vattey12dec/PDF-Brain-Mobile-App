@@ -20,6 +20,15 @@ def verify_supabase_token(token: str) -> AuthenticatedUser:
     verification or by querying the Supabase Auth `/auth/v1/user` endpoint.
     Never trusts client-supplied user IDs outside the signed JWT.
     """
+    try:
+        jwt.get_unverified_header(token)
+    except jwt.InvalidTokenError:
+        # Not even a structurally valid JWT: reject without calling Supabase.
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token.",
+        )
+
     if settings.SUPABASE_JWT_SECRET:
         try:
             payload = jwt.decode(
