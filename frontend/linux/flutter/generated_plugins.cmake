@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   app_links_linux
+  syncfusion_pdfviewer_linux
   url_launcher_linux
 )
 

@@ -7,14 +7,19 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     # Gemini AI Configuration (Server-Side Only)
-    GEMINI_API_KEY: str = "AQ.Ab8RN6L2nK1qbmSSMSe6pFwpTH-wIgcBnyNPe7sb4afKthRsuQ"
+    GEMINI_API_KEY: str  # required, set in .env
     GEMINI_MODEL: str = "gemini-3.8-flash"
+    GEMINI_FALLBACK_MODELS: str = (
+        "gemini-3.7-flash,gemini-3.5-flash,gemini-3.5-flash-lite,gemini-2.5-flash"
+    )
     EMBEDDING_MODEL: str = "gemini-embedding-001"
+    GEMINI_MAX_ATTEMPTS: int = 3
+    GEMINI_RETRY_BASE_DELAY: float = 1.0
 
     # Supabase Auth Configuration
-    SUPABASE_URL: str = "https://ffbairirlkjchobvbply.supabase.co"
-    SUPABASE_ANON_KEY: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmYmFpcmlybGtqY2hvYnZicGx5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzMjQ1NzEsImV4cCI6MjEwNzkwMDU3MX0.f_0tMjG7nv9TwIu4dFidqCmNlfDOYrmslfi353VtgbM"
-    SUPABASE_JWT_SECRET: str = "I9vHe0ht3uwjgr+F67qOhyt5ffT1Kboy/AVGobK0LHsquEV2OzrxuYVevoMNViKLN3cRKtuXjUq80jxVe2DSXw=="
+    SUPABASE_URL: str  # set in .env
+    SUPABASE_ANON_KEY: str  # set in .env
+    SUPABASE_JWT_SECRET: str  # required, set in .env
 
     # Persistence Configuration
     DATABASE_URL: str = "sqlite:///./pdf_brain.db"
@@ -28,7 +33,18 @@ class Settings(BaseSettings):
     TOP_K: int = 5
     MAX_DISTANCE_THRESHOLD: float = 0.78
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+    @property
+    def gemini_model_chain(self) -> list[str]:
+        chain = [self.GEMINI_MODEL]
+        for m in self.GEMINI_FALLBACK_MODELS.split(","):
+            m = m.strip()
+            if m and m not in chain:
+                chain.append(m)
+        return chain
 
     def ensure_dirs(self) -> None:
         Path(self.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)

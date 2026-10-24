@@ -1,14 +1,23 @@
 import json
+import random
+import logging
+import time
 from typing import List, Optional, Protocol
 from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
+from google.genai import errors as genai_errors
 from fastapi import HTTPException, status
 from app.core.config import settings
 from app.schemas.api_schemas import SourceReference
 from app.services.vector_service import RetrievedChunk
-import logging
-import time
+
+logger = logging.getLogger("uvicorn.error")
+
+REQUEST_TIMEOUT_MS = 25_000      # one Gemini call fails after 25 s
+ATTEMPTS_PER_MODEL = 2
+TOTAL_DEADLINE_S = 70.0          # give up on the whole question after this
+TRANSIENT_CODES = {429, 500, 502, 503, 504}
 
 SYSTEM_PROMPT = (
     "You are PDF Brain, an academic assistant and problem-solving tutor that helps users understand and solve content from their uploaded PDF documents.\n"
@@ -53,8 +62,32 @@ class GeminiLLMClient:
                 detail="GEMINI_API_KEY is not configured on the backend server.",
             )
         if self._client is None:
-            self._client = genai.Client(api_key=self.api_key)
+            self._client = genai.Client(
+                api_key=self.api_key,
+                http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS),
+            )
         return self._client
+
+    def _model_chain(self) -> List[str]:
+        chain = [self.model_name]
+        extra = getattr(settings, "gemini_model_chain", None) or []
+        for m in extra:
+            if m not in chain:
+                chain.append(m)
+        return chain
+
+    @staticmethod
+    def _build_config(model: str) -> types.GenerateContentConfig:
+        kwargs = dict(
+            system_instruction=SYSTEM_PROMPT,
+            temperature=0.1,
+            response_mime_type="application/json",
+            response_schema=LLMGenerationSchema,
+        )
+        # 2.5 flash "thinks" by default, which adds many seconds. Turn it off.
+        if "2.5" in model and "pro" not in model:
+            kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+        return types.GenerateContentConfig(**kwargs)
 
     def generate_grounded_answer(self, question: str, chunks: List[RetrievedChunk]) -> LLMGenerationSchema:
         excerpts_xml_parts: List[str] = []
@@ -73,42 +106,62 @@ class GeminiLLMClient:
             f"Respond strictly in JSON matching the required schema."
         )
 
-        models_to_try = [self.model_name, "gemini-3.6-flash"]
+        deadline = time.monotonic() + TOTAL_DEADLINE_S
         last_exc: Optional[Exception] = None
 
-        for model in models_to_try:
-            for attempt in range(2):
+        for model in self._model_chain():
+            for attempt in range(ATTEMPTS_PER_MODEL):
+                if time.monotonic() > deadline:
+                    break
                 try:
                     response = self.client.models.generate_content(
                         model=model,
                         contents=user_prompt,
-                        config=types.GenerateContentConfig(
-                            system_instruction=SYSTEM_PROMPT,
-                            temperature=0.1,
-                            response_mime_type="application/json",
-                            response_schema=LLMGenerationSchema,
-                        ),
+                        config=self._build_config(model),
                     )
-                    raw_text = response.text or ""
-                    parsed_data = json.loads(raw_text)
-                    return LLMGenerationSchema.model_validate(parsed_data)
-                except json.JSONDecodeError as exc:
-                    raise HTTPException(
-                        status_code=status.HTTP_502_BAD_GATEWAY,
-                        detail="AI provider returned a malformed response. Please try asking again.",
-                    ) from exc
+                    parsed = json.loads(response.text or "")
+                    return LLMGenerationSchema.model_validate(parsed)
+
                 except HTTPException:
                     raise
-                except Exception as exc:
+
+                except genai_errors.APIError as exc:
                     last_exc = exc
-                    logging.getLogger("uvicorn.error").warning(
-                        "Gemini call failed (model=%s, attempt=%d): %r", model, attempt + 1, exc
+                    code = getattr(exc, "code", None)
+                    logger.warning(
+                        "Gemini call failed (model=%s, attempt=%d, code=%s): %r",
+                        model, attempt + 1, code, exc,
                     )
-                    time.sleep(1.5 * (attempt + 1))
+                    if code in (401, 403):
+                        raise HTTPException(
+                            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail="AI service is misconfigured (API key rejected).",
+                        ) from exc
+                    if code == 404:
+                        break  # bad model name: skip to the next model
+                    if code not in TRANSIENT_CODES:
+                        raise HTTPException(
+                            status_code=status.HTTP_502_BAD_GATEWAY,
+                            detail="AI provider rejected the request.",
+                        ) from exc
+                    # 503 / 429: model is busy, move on after one quick retry
+                    if attempt < ATTEMPTS_PER_MODEL - 1:
+                        time.sleep(1.0 + random.random())
+
+                except (json.JSONDecodeError, ValueError) as exc:
+                    last_exc = exc
+                    logger.warning("Gemini returned malformed JSON (model=%s): %r", model, exc)
+
+                except Exception as exc:  # timeouts, network errors
+                    last_exc = exc
+                    logger.warning(
+                        "Gemini call error (model=%s, attempt=%d): %r", model, attempt + 1, exc
+                    )
+                    break  # a timeout on this model: try the next one
 
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"AI generation failed via model ({self.model_name}). Please retry shortly.",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The AI service is busy right now. Please retry in a moment.",
         ) from last_exc
 
 

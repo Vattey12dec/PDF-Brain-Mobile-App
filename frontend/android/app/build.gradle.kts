@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.example.pdf_brain"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
